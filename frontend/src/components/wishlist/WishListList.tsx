@@ -70,7 +70,7 @@ export function WishListList() {
       )}
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {wishLists?.map((wishList: WishList) => (
+        {wishLists?.data?.map((wishList: WishList) => (
           <Link
             key={wishList.id}
             to={`/wishlists/${wishList.id}`}

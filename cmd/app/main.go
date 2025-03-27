@@ -9,19 +9,23 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 	_ "wishlist/docs" // Import swagger docs
 	"wishlist/internal/api/handlers"
 	"wishlist/internal/api/middleware"
-	"wishlist/internal/auth"
+	"wishlist/internal/config"
 	"wishlist/internal/domain"
 	"wishlist/internal/observability"
 	"wishlist/internal/repository"
 	"wishlist/internal/service"
+
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func initDB() (*gorm.DB, error) {
@@ -48,7 +52,7 @@ func initDB() (*gorm.DB, error) {
 
 func main() {
 	// Initialize logger
-	logger, err := observability.NewLogger(os.Getenv("LOG_LEVEL"))
+	logger, err := observability.NewLogger()
 	if err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
 		os.Exit(1)
@@ -61,7 +65,7 @@ func main() {
 	// Initialize database
 	db, err := initDB()
 	if err != nil {
-		logger.Fatal("Failed to initialize database", logger.WithError(err))
+		logger.Fatal("Failed to initialize database", zap.Error(err))
 	}
 
 	// Initialize repositories
@@ -72,27 +76,56 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	wishListService := service.NewWishListService(wishListRepo)
 
-	// Initialize JWT manager
-	jwtManager := auth.NewJWTManager(
-		os.Getenv("JWT_SECRET"),
-		24*time.Hour,
-	)
+	// Создаем конфигурацию
+	cfg := &config.Config{
+		JWTSecret: os.Getenv("JWT_SECRET"),
+	}
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(jwtManager, userService)
+	authHandler := handlers.NewAuthHandler(userService, cfg)
 	wishListHandler := handlers.NewWishListHandler(wishListService)
 	healthHandler := handlers.NewHealthHandler(db)
-
-	// Initialize rate limiter
-	limiter := middleware.NewIPRateLimiter(rate.Limit(10), 30) // 10 requests per second, burst of 30
 
 	// Initialize router
 	r := gin.Default()
 
+	// Создаем ограничитель запросов
+	limiter := rate.NewLimiter(rate.Limit(10), 30) // 10 requests per second, burst of 30
+
 	// Add middleware
 	r.Use(middleware.CORS())
 	r.Use(middleware.RateLimit(limiter))
-	r.Use(middleware.ObservabilityMiddleware(logger, metrics))
+	// Используем логгер напрямую
+	r.Use(func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		method := c.Request.Method
+
+		c.Next()
+
+		latency := time.Since(start)
+		statusCode := c.Writer.Status()
+
+		logger.Info("HTTP Request",
+			zap.String("path", path),
+			zap.String("method", method),
+			zap.Int("status", statusCode),
+			zap.Duration("latency", latency),
+		)
+
+		// Record metrics
+		metrics.HTTPRequestsTotal.WithLabelValues(
+			method,
+			path,
+			fmt.Sprintf("%d", statusCode),
+		).Inc()
+
+		metrics.HTTPRequestDuration.WithLabelValues(
+			method,
+			path,
+			fmt.Sprintf("%d", statusCode),
+		).Observe(latency.Seconds())
+	})
 
 	// Health check endpoint
 	r.GET("/health", healthHandler.Check)
@@ -104,22 +137,22 @@ func main() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Auth routes
-	auth := r.Group("/api/v1/auth")
+	authRoutes := r.Group("/api/v1/auth")
 	{
-		auth.POST("/register", authHandler.Register)
-		auth.POST("/login", authHandler.Login)
+		authRoutes.POST("/register", authHandler.Register)
+		authRoutes.POST("/login", authHandler.Login)
 	}
 
 	// Protected routes
 	api := r.Group("/api/v1")
-	api.Use(middleware.AuthMiddleware(jwtManager))
+	api.Use(middleware.Auth(os.Getenv("JWT_SECRET")))
 	{
 		// Wishlist routes
 		wishlists := api.Group("/wishlists")
 		{
 			wishlists.POST("", wishListHandler.Create)
 			wishlists.GET("", wishListHandler.List)
-			wishlists.GET("/:id", wishListHandler.GetByID)
+			wishlists.GET("/:id", wishListHandler.Get)
 			wishlists.PUT("/:id", wishListHandler.Update)
 			wishlists.DELETE("/:id", wishListHandler.Delete)
 			wishlists.POST("/:id/items", wishListHandler.AddItem)
@@ -135,7 +168,7 @@ func main() {
 	// Graceful shutdown
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("Failed to start server", logger.WithError(err))
+			logger.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
 
@@ -150,8 +183,8 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Fatal("Server forced to shutdown:", logger.WithError(err))
+		logger.Fatal("Server forced to shutdown:", zap.Error(err))
 	}
 
 	logger.Info("Server exiting")
-} 
+}

@@ -1,5 +1,5 @@
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import { GripVerticalIcon } from '@heroicons/react/24/outline';
+import { Bars3BottomLeftIcon } from '@heroicons/react/24/outline';
 
 interface DraggableListProps<T> {
   items: T[];
@@ -44,7 +44,7 @@ export function DraggableList<T>({ items, onReorder, renderItem, keyExtractor }:
                       {...provided.dragHandleProps}
                       className="mr-4 text-gray-400"
                     >
-                      <GripVerticalIcon className="h-5 w-5" />
+                      <Bars3BottomLeftIcon className="h-5 w-5" />
                     </div>
                     {renderItem(item)}
                   </div>

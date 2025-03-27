@@ -2,6 +2,16 @@ package docs
 
 import "github.com/swaggo/swag"
 
+// SwaggerInfo holds exported Swagger Info so clients can modify it
+var SwaggerInfo = &swag.Spec{
+	Version:     "1.0",
+	Host:        "localhost:8080",
+	BasePath:    "/api/v1",
+	Schemes:     []string{},
+	Title:       "Wishlist API",
+	Description: "A simple wishlist API service.",
+}
+
 // @title           Wishlist API
 // @version         1.0
 // @description     A simple wishlist API service.
@@ -20,4 +30,4 @@ import "github.com/swaggo/swag"
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description Type "Bearer" followed by a space and JWT token. 
+// @description Type "Bearer" followed by a space and JWT token.

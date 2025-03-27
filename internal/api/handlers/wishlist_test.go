@@ -3,21 +3,23 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"wishlist/internal/auth"
 	"wishlist/internal/repository"
 	"wishlist/internal/service"
 	"wishlist/internal/testutil"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func setupTestRouter(t *testing.T) (*gin.Engine, *WishListHandler, string) {
+func setupWishListTestRouter(t *testing.T) (*gin.Engine, *WishListHandler, string) {
 	db := testutil.TestDB(t)
 	defer testutil.CleanupDB(t, db)
 
@@ -50,7 +52,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *WishListHandler, string) {
 	{
 		wishlists.POST("", wishListHandler.Create)
 		wishlists.GET("", wishListHandler.List)
-		wishlists.GET("/:id", wishListHandler.GetByID)
+		wishlists.GET("/:id", wishListHandler.Get)
 		wishlists.PUT("/:id", wishListHandler.Update)
 		wishlists.DELETE("/:id", wishListHandler.Delete)
 		wishlists.POST("/:id/items", wishListHandler.AddItem)
@@ -60,7 +62,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *WishListHandler, string) {
 }
 
 func TestWishListHandler(t *testing.T) {
-	r, _, token := setupTestRouter(t)
+	r, _, token := setupWishListTestRouter(t)
 
 	// Create a wishlist
 	reqBody := map[string]string{
@@ -78,7 +80,8 @@ func TestWishListHandler(t *testing.T) {
 	var wishList map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &wishList)
 	require.NoError(t, err)
-	wishListID := wishList["id"].(float64)
+	assert.NotNil(t, wishList["id"])
+	id := fmt.Sprintf("/wishlists/%.0f", wishList["id"].(float64))
 
 	t.Run("list wishlists", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/wishlists", nil)
@@ -95,7 +98,7 @@ func TestWishListHandler(t *testing.T) {
 	})
 
 	t.Run("get wishlist", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/wishlists/1", nil)
+		req := httptest.NewRequest("GET", id, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -113,7 +116,7 @@ func TestWishListHandler(t *testing.T) {
 			"name": "Updated Wishlist",
 		}
 		jsonBody, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest("PUT", "/wishlists/1", bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest("PUT", id, bytes.NewBuffer(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
@@ -129,12 +132,12 @@ func TestWishListHandler(t *testing.T) {
 
 	t.Run("add item to wishlist", func(t *testing.T) {
 		reqBody := map[string]string{
-			"title":       "New Item",
+			"name":        "New Item",
 			"description": "Item Description",
-			"url":         "https://example.com",
+			"status":      "wanted",
 		}
 		jsonBody, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest("POST", "/wishlists/1/items", bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest("POST", id+"/items", bytes.NewBuffer(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
@@ -145,13 +148,13 @@ func TestWishListHandler(t *testing.T) {
 		var item map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &item)
 		require.NoError(t, err)
-		assert.Equal(t, "New Item", item["title"])
+		assert.Equal(t, "New Item", item["name"])
 		assert.Equal(t, "Item Description", item["description"])
-		assert.Equal(t, "https://example.com", item["url"])
+		assert.Equal(t, "wanted", item["status"])
 	})
 
 	t.Run("delete wishlist", func(t *testing.T) {
-		req := httptest.NewRequest("DELETE", "/wishlists/1", nil)
+		req := httptest.NewRequest("DELETE", id, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -159,11 +162,11 @@ func TestWishListHandler(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, w.Code)
 
 		// Verify wishlist is deleted
-		req = httptest.NewRequest("GET", "/wishlists/1", nil)
+		req = httptest.NewRequest("GET", id, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w = httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
-} 
+}

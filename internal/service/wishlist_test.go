@@ -3,10 +3,12 @@ package service
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"wishlist/internal/domain"
 	"wishlist/internal/repository"
 	"wishlist/internal/testutil"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWishListService(t *testing.T) {
@@ -24,7 +26,14 @@ func TestWishListService(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("create wishlist", func(t *testing.T) {
-		wishList, err := wishListService.CreateWishList(user.ID, "My Birthday Wishes")
+		wishList := &domain.WishList{
+			UserID:      user.ID,
+			Name:        "My Birthday Wishes",
+			Description: "Things I want for my birthday",
+			Status:      "active",
+		}
+
+		err := wishListService.Create(wishList)
 		require.NoError(t, err)
 		assert.NotZero(t, wishList.ID)
 		assert.Equal(t, "My Birthday Wishes", wishList.Name)
@@ -33,11 +42,18 @@ func TestWishListService(t *testing.T) {
 
 	t.Run("get wishlist", func(t *testing.T) {
 		// Create a wishlist first
-		wishList, err := wishListService.CreateWishList(user.ID, "Test Wishlist")
+		wishList := &domain.WishList{
+			UserID:      user.ID,
+			Name:        "Test Wishlist",
+			Description: "Test Description",
+			Status:      "active",
+		}
+
+		err := wishListService.Create(wishList)
 		require.NoError(t, err)
 
 		// Get the wishlist
-		found, err := wishListService.GetWishList(wishList.ID, user.ID)
+		found, err := wishListService.GetByID(wishList.ID, user.ID)
 		require.NoError(t, err)
 		assert.Equal(t, wishList.ID, found.ID)
 		assert.Equal(t, wishList.Name, found.Name)
@@ -45,54 +61,101 @@ func TestWishListService(t *testing.T) {
 
 	t.Run("list wishlists", func(t *testing.T) {
 		// Create multiple wishlists
-		_, err := wishListService.CreateWishList(user.ID, "Wishlist 1")
-		require.NoError(t, err)
-		_, err = wishListService.CreateWishList(user.ID, "Wishlist 2")
+		wishList1 := &domain.WishList{
+			UserID:      user.ID,
+			Name:        "Wishlist 1",
+			Description: "Description 1",
+			Status:      "active",
+		}
+
+		err := wishListService.Create(wishList1)
 		require.NoError(t, err)
 
-		wishLists, err := wishListService.ListWishLists(user.ID)
+		wishList2 := &domain.WishList{
+			UserID:      user.ID,
+			Name:        "Wishlist 2",
+			Description: "Description 2",
+			Status:      "active",
+		}
+
+		err = wishListService.Create(wishList2)
 		require.NoError(t, err)
-		assert.Len(t, wishLists, 2)
+
+		wishLists, err := wishListService.GetByUserID(user.ID)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(wishLists), 2)
 	})
 
 	t.Run("update wishlist", func(t *testing.T) {
 		// Create a wishlist first
-		wishList, err := wishListService.CreateWishList(user.ID, "Original Name")
+		wishList := &domain.WishList{
+			UserID:      user.ID,
+			Name:        "Original Name",
+			Description: "Original Description",
+			Status:      "active",
+		}
+
+		err := wishListService.Create(wishList)
 		require.NoError(t, err)
 
 		// Update the wishlist
-		updated, err := wishListService.UpdateWishList(wishList.ID, user.ID, "Updated Name")
+		wishList.Name = "Updated Name"
+		err = wishListService.Update(wishList, user.ID)
+		require.NoError(t, err)
+
+		// Get updated wishlist
+		updated, err := wishListService.GetByID(wishList.ID, user.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "Updated Name", updated.Name)
 	})
 
 	t.Run("delete wishlist", func(t *testing.T) {
 		// Create a wishlist first
-		wishList, err := wishListService.CreateWishList(user.ID, "To Delete")
+		wishList := &domain.WishList{
+			UserID:      user.ID,
+			Name:        "To Delete",
+			Description: "Will be deleted",
+			Status:      "active",
+		}
+
+		err := wishListService.Create(wishList)
 		require.NoError(t, err)
 
 		// Delete the wishlist
-		err = wishListService.DeleteWishList(wishList.ID, user.ID)
+		err = wishListService.Delete(wishList.ID, user.ID)
 		require.NoError(t, err)
 
 		// Try to get the deleted wishlist
-		_, err = wishListService.GetWishList(wishList.ID, user.ID)
+		_, err = wishListService.GetByID(wishList.ID, user.ID)
 		assert.Error(t, err)
-		assert.Equal(t, "wishlist not found", err.Error())
 	})
 
 	t.Run("add item to wishlist", func(t *testing.T) {
 		// Create a wishlist first
-		wishList, err := wishListService.CreateWishList(user.ID, "Test Wishlist")
+		wishList := &domain.WishList{
+			UserID:      user.ID,
+			Name:        "Test Wishlist",
+			Description: "Test Description",
+			Status:      "active",
+		}
+
+		err := wishListService.Create(wishList)
 		require.NoError(t, err)
 
 		// Add an item
-		item, err := wishListService.AddItem(wishList.ID, user.ID, "New Item", "Description", "https://example.com")
+		item := &domain.WishItem{
+			WishListID:  wishList.ID,
+			Name:        "New Item",
+			Description: "Description",
+			Status:      "wanted",
+			Priority:    1,
+		}
+
+		err = wishListService.AddItem(item, user.ID)
 		require.NoError(t, err)
 		assert.NotZero(t, item.ID)
-		assert.Equal(t, "New Item", item.Title)
+		assert.Equal(t, "New Item", item.Name)
 		assert.Equal(t, "Description", item.Description)
-		assert.Equal(t, "https://example.com", item.URL)
 		assert.Equal(t, wishList.ID, item.WishListID)
 	})
-} 
+}

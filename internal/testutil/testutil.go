@@ -5,10 +5,11 @@ import (
 	"os"
 	"testing"
 
+	"wishlist/internal/domain"
+
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"wishlist/internal/domain"
 )
 
 // TestDB creates a test database connection
@@ -16,8 +17,8 @@ func TestDB(t *testing.T) *gorm.DB {
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		getEnvOrDefault("TEST_DB_HOST", "localhost"),
 		getEnvOrDefault("TEST_DB_PORT", "5432"),
-		getEnvOrDefault("TEST_DB_USER", "postgres"),
-		getEnvOrDefault("TEST_DB_PASSWORD", "postgres"),
+		getEnvOrDefault("TEST_DB_USER", "wishlist"),
+		getEnvOrDefault("TEST_DB_PASSWORD", "wishlist"),
 		getEnvOrDefault("TEST_DB_NAME", "wishlist_test"),
 	)
 
@@ -45,4 +46,4 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-} 
+}

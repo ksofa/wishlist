@@ -3,10 +3,11 @@ package service
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"wishlist/internal/repository"
 	"wishlist/internal/testutil"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUserService_Register(t *testing.T) {
@@ -21,7 +22,7 @@ func TestUserService_Register(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotZero(t, user.ID)
 		assert.Equal(t, "test@example.com", user.Email)
-		assert.NotEqual(t, "password123", user.Password) // Password should be hashed
+		assert.NotEmpty(t, user.PasswordHash) // Password should be hashed
 	})
 
 	t.Run("duplicate email", func(t *testing.T) {
@@ -65,4 +66,4 @@ func TestUserService_Login(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, "invalid credentials", err.Error())
 	})
-} 
+}

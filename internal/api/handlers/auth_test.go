@@ -6,25 +6,30 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
+
+	"wishlist/internal/config"
+	"wishlist/internal/repository"
+	"wishlist/internal/service"
+	"wishlist/internal/testutil"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"wishlist/internal/auth"
-	"wishlist/internal/repository"
-	"wishlist/internal/service"
-	"wishlist/internal/testutil"
 )
 
-func setupTestRouter(t *testing.T) (*gin.Engine, *AuthHandler) {
+func setupAuthTestRouter(t *testing.T) (*gin.Engine, *AuthHandler) {
 	db := testutil.TestDB(t)
 	defer testutil.CleanupDB(t, db)
 
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
-	jwtManager := auth.NewJWTManager("test-secret", 24*time.Hour)
-	authHandler := NewAuthHandler(jwtManager, userService)
+
+	// Создаем конфигурацию для JWT
+	cfg := &config.Config{
+		JWTSecret: "test-secret",
+	}
+
+	authHandler := NewAuthHandler(userService, cfg)
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -35,7 +40,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *AuthHandler) {
 }
 
 func TestAuthHandler_Register(t *testing.T) {
-	r, _ := setupTestRouter(t)
+	r, _ := setupAuthTestRouter(t)
 
 	t.Run("successful registration", func(t *testing.T) {
 		reqBody := map[string]string{
@@ -79,7 +84,7 @@ func TestAuthHandler_Register(t *testing.T) {
 }
 
 func TestAuthHandler_Login(t *testing.T) {
-	r, _ := setupTestRouter(t)
+	r, _ := setupAuthTestRouter(t)
 
 	// Register a test user first
 	reqBody := map[string]string{
@@ -119,4 +124,4 @@ func TestAuthHandler_Login(t *testing.T) {
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
-} 
+}
